@@ -1,0 +1,8 @@
+GameProject {
+ ID "CTIreforger"
+ GUID "64C56367A6471229"
+ TITLE "CTI_reforger"
+ Dependencies {
+  "58D0FB3206B6F859"
+ }
+}
