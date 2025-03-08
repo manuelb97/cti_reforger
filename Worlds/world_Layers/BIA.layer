@@ -1,3 +1,7 @@
 SCR_GameModeCampaign BIA_GameMode_Campaign1 : "{B39ECBD42ED4CF31}Prefabs/MP/Modes/Conflict/BIA_GameMode_Campaign.et" {
+ components {
+  SCR_BIA_CustomComponent "{64D0D3896A891D78}" {
+  }
+ }
  coords 10942.964 16.798 8862.838
 }
