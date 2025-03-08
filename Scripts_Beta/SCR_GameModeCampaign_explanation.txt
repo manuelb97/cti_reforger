@@ -1,0 +1,143 @@
+### **How the Game Mode Starts and Ensures the World is Fully Initialized**  
+The `SCR_GameModeCampaign` class extends `SCR_BaseGameMode`, meaning it follows the **standard game mode initialization process** in Arma Reforger. Below is a breakdown of how it starts and ensures the world is ready.
+
+---
+
+## **🔹 Game Mode Initialization Flow**
+### **1. The Game Mode is Created**
+- The constructor `SCR_GameModeCampaign(IEntitySource src, IEntity parent)` is called when the game mode entity is spawned.
+- It verifies some attributes, registers debug menus (if enabled), and overrides parameters from the mission header.
+
+### **2. `OnWorldPostProcess()` is Called**
+```cpp
+override void OnWorldPostProcess(World world)
+{
+    super.OnWorldPostProcess(world);
+
+    if (IsProxy() || !GetGame().InPlayMode())
+        return;
+
+    if (m_bAutostart)
+        Start();  // ✅ This starts the game mode if autostart is enabled.
+
+    m_bWorldPostProcessDone = true;
+}
+```
+- `OnWorldPostProcess()` is a key event in Enfusion that fires **after the world has finished initializing**.  
+- This ensures:
+  ✅ The world exists.  
+  ✅ All map objects (buildings, roads, assets) are loaded.  
+  ✅ It is safe to start game mechanics.  
+
+### **3. The `Start()` Function Runs**
+If `m_bAutostart` is enabled, `Start()` is called:
+```cpp
+protected void Start()
+{
+    // ✅ Ensures military bases and HQs are properly set up.
+    SCR_MilitaryBaseSystem baseManager = SCR_MilitaryBaseSystem.GetInstance();
+    if (!baseManager)
+        return;
+
+    m_bStarted = true;
+    Replication.BumpMe();
+    m_BaseManager.OnAllBasesInitialized(); // ✅ Signals that bases are fully initialized.
+    OnStarted(); // ✅ Fires an event that the game mode has started.
+}
+```
+- This function ensures that **bases, control points, and HQs are assigned and initialized**.
+- After that, `OnStarted()` is called to notify other components that the game mode is ready.
+
+### **4. `OnStarted()` Fires an Event**
+```cpp
+void OnStarted()
+{
+    SCR_RadioCoverageSystem coverageSystem = SCR_RadioCoverageSystem.GetInstance();
+    if (coverageSystem)
+        coverageSystem.TogglePeriodicUpdates(false);
+
+    SCR_SpawnPoint.Event_SpawnPointFactionAssigned.Insert(OnSpawnPointFactionAssigned);
+
+    if (m_OnStarted)
+        m_OnStarted.Invoke(); // ✅ Triggers event for other scripts/components.
+}
+```
+- The **game mode is now fully running**.
+- Other components (spawning, radio systems, etc.) now react to the game mode's start.
+
+---
+
+## **🔹 When is the World Fully Initialized?**
+1️⃣ **By the time `OnWorldPostProcess()` runs**, the world is initialized and objects are loaded.  
+2️⃣ **By the time `Start()` completes**, bases and key gameplay elements are initialized.  
+3️⃣ **If you need buildings/entities, wait for `m_BaseManager.OnAllBasesInitialized()`.**  
+
+---
+
+## **✅ How to Ensure Your Script Runs at the Right Time**
+If you need to run `MarkHostileSectors()` **only when the world and entities are fully initialized**, use **one of these approaches**:
+
+### **📌 Option 1: Run in `OnWorldPostProcess()`**
+```cpp
+override void OnWorldPostProcess(World world)
+{
+    super.OnWorldPostProcess(world);
+    Print("World is fully initialized! Calling MarkHostileSectors...");
+    
+    GetGame().GetCallqueue().CallLater(MarkHostileSectors, 1000, false); // ✅ Small delay to ensure stability
+}
+```
+🔹 **Best for:** World-level initialization (ensures all objects exist).  
+
+---
+
+### **📌 Option 2: Run After `OnStarted()` Fires**
+Modify your component to listen for game mode start:
+```cpp
+override void OnPostInit(IEntity owner)
+{
+    super.OnPostInit(owner);
+    
+    SCR_GameModeCampaign gameMode = SCR_GameModeCampaign.Cast(GetGame().GetGameMode());
+    if (!gameMode)
+    {
+        Print("Game Mode not found!", LogLevel.ERROR);
+        return;
+    }
+
+    gameMode.GetOnStarted().Insert(MarkHostileSectors); // ✅ Runs only when game mode is ready
+}
+```
+🔹 **Best for:** Ensuring the game mode is running before execution.
+
+---
+
+### **📌 Option 3: Use `OnAllBasesInitialized()` (If You Need Buildings)**
+If your script depends on **buildings and bases being ready**, listen for base initialization:
+```cpp
+override void OnPostInit(IEntity owner)
+{
+    super.OnPostInit(owner);
+
+    SCR_GameModeCampaign gameMode = SCR_GameModeCampaign.Cast(GetGame().GetGameMode());
+    if (!gameMode)
+    {
+        Print("Game Mode not found!", LogLevel.ERROR);
+        return;
+    }
+
+    gameMode.GetBaseManager().GetOnAllBasesInitialized().Insert(MarkHostileSectors);
+}
+```
+🔹 **Best for:** Scripts that need bases, control points, or buildings to be fully processed.
+
+---
+
+## **🚀 Summary**
+- ✅ The **world is fully initialized** after `OnWorldPostProcess()`.
+- ✅ The **game mode is fully started** after `OnStarted()`.
+- ✅ The **bases and control points are ready** after `OnAllBasesInitialized()`.
+- ✅ **For most cases, running your script after `OnWorldPostProcess()` is enough.**  
+  If you depend on **factions, bases, or control points**, wait for `OnAllBasesInitialized()`.  
+
+Would you like a specific implementation for your case? 🚀
